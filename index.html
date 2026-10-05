@@ -1,0 +1,423 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#F8F0DF">
+<meta name="description" content="A private, offline-first journaling space with local AI through Ollama.">
+<title>My Journal Book — Private Journaling</title>
+<link rel="stylesheet" href="style.css?v=journal-book-style-3">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="apple-touch-icon" href="icons/icon-192.png">
+</head>
+<body>
+<div class="ambient ambient-one"></div>
+<div class="ambient ambient-two"></div>
+
+<header class="top site-header">
+  <div class="brand-block">
+    <p class="eyebrow">MY JOURNAL BOOK</p>
+    <h1>My Journal Book</h1>
+    <p class="tagline">A quiet place for your thoughts.</p>
+  </div>
+  <div class="header-actions">
+    <span id="privacy-badge" class="status-chip" title="Your journal stays on this device"><span class="chip-dot"></span>Local &amp; private</span>
+    <span id="offline-badge" class="status-chip"><span class="chip-dot"></span><span id="offline-label">Offline-ready</span></span>
+    <button id="btn-settings" class="icon-btn" type="button" aria-label="Open settings" title="Settings">⚙</button>
+  </div>
+</header>
+
+<!-- Local AI connection status -->
+<section id="model-status" class="model glass-panel" data-state="loading" aria-live="polite">
+  <div class="model-heading">
+    <div>
+      <p class="eyebrow">LOCAL AI</p>
+      <p id="model-text">Connecting to Ollama on this computer…</p>
+    </div>
+    <span id="model-state-pill" class="mini-pill">Connecting</span>
+  </div>
+  <progress id="model-progress" max="100" value="0"></progress>
+  <div class="model-controls">
+    <div class="model-field">
+      <label for="ollama-model">Local model</label>
+      <select id="ollama-model" disabled><option>Connect to Ollama</option></select>
+    </div>
+    <button id="btn-connect" class="btn" type="button">Reconnect</button>
+  </div>
+  <details class="model-help">
+    <summary>Ollama setup &amp; connection help</summary>
+    <p>Install Ollama on this computer and run <code>ollama pull gemma3:1b</code> once. No model is downloaded by this app.</p>
+    <p>For a hosted deployment, set <code>OLLAMA_ORIGINS</code> to that site's exact origin in Ollama. Local AI is still performed on your computer.</p>
+    <p>On Windows, add OLLAMA_ORIGINS to your user environment variables. Use downloaded local models and optionally disable Ollama cloud features with <code>OLLAMA_NO_CLOUD=1</code>.</p>
+    <p>Writing and saving remain available without AI. <strong>localhost on a phone refers to the phone, not your computer.</strong></p>
+    <a href="https://docs.ollama.com/faq" target="_blank" rel="noopener noreferrer">Ollama setup guide</a>
+  </details>
+</section>
+
+<input type="radio" name="tab" id="t-write" class="tab-input" checked>
+<input type="radio" name="tab" id="t-ideas" class="tab-input">
+<input type="radio" name="tab" id="t-history" class="tab-input">
+<input type="radio" name="tab" id="t-explore" class="tab-input">
+
+<main>
+  <!-- WRITE -->
+  <section id="panel-write" class="panel">
+    <div class="welcome-row">
+      <div>
+        <p id="today-label" class="eyebrow">MONDAY · OCTOBER 5</p>
+        <h2>What is on your mind?</h2>
+        <p class="hint">Write freely. Your words stay in this browser.</p>
+      </div>
+      <div class="today-stat" aria-live="polite"><strong id="today-count">0</strong><span>entries today</span></div>
+    </div>
+
+    <div id="continue-card" class="continue-card glass-panel" hidden></div>
+
+    <div class="writing-frame">
+      <div class="writing-toolbar">
+        <span class="writing-label">Private page</span>
+        <span id="writing-meta" class="writing-meta">0 words · 0 min</span>
+      </div>
+      <textarea id="entry-text" class="page" rows="10" placeholder="Today I feel…" aria-label="Journal entry"></textarea>
+      <div id="followup-context" class="followup-context" hidden>
+        <div class="followup-label"><span class="eyebrow">A THOUGHT FROM BEFORE</span><button id="followup-close" class="text-btn" type="button">Clear</button></div>
+        <p id="followup-source"></p>
+        <strong>And now?</strong>
+      </div>
+      <div class="writing-footer">
+        <label class="compact-field" for="entry-tags">
+          <span>Tags <small>(optional)</small></span>
+          <input id="entry-tags" type="text" maxlength="120" placeholder="#college #career">
+        </label>
+        <span id="edit-state" class="edit-state" hidden>Editing an entry</span>
+      </div>
+    </div>
+
+    <div class="write-mood-row">
+      <span class="field-label">Mood <small>(optional)</small></span>
+      <div id="write-mood-options" class="mood-inline" aria-label="Mood for this entry">
+        <label><input type="radio" name="entry-mood" value="anxious"><span>Anxious</span></label>
+        <label><input type="radio" name="entry-mood" value="grateful"><span>Grateful</span></label>
+        <label><input type="radio" name="entry-mood" value="reflective"><span>Reflective</span></label>
+        <label><input type="radio" name="entry-mood" value="bored"><span>Bored</span></label>
+      </div>
+    </div>
+
+    <div class="actions write-actions">
+      <button id="btn-questions" class="btn secondary" type="button">✦ Reflect on this</button>
+      <button id="btn-save" class="btn primary" type="button">Save entry</button>
+    </div>
+
+    <div id="questions-result" class="result reflection-card" hidden>
+      <div class="result-kicker">✦ A quiet reflection</div>
+      <h3>Keep writing about…</h3>
+      <ol id="questions-list"></ol>
+      <div class="reflection-triad">
+        <div>
+          <p class="eyebrow">WHAT I HEARD</p>
+          <p id="reflection-heard"></p>
+        </div>
+        <div>
+          <p class="eyebrow">IF YOU WANT TO</p>
+          <p id="reflection-next"></p>
+        </div>
+      </div>
+      <div id="reflection-summary" class="reflection-summary" hidden>
+        <p class="eyebrow">SOMETHING TO NOTICE</p>
+        <p id="reflection-summary-text"></p>
+      </div>
+      <div class="result-actions">
+        <button id="btn-reask" class="text-btn" type="button">Reflect again</button>
+        <button id="btn-pattern" class="text-btn" type="button">Find a pattern</button>
+      </div>
+      <p class="hint support-note">This is a writing aid, not professional support.</p>
+    </div>
+  </section>
+
+  <!-- IDEAS -->
+  <section id="panel-ideas" class="panel">
+    <p class="eyebrow section-eyebrow">A PAGE TO BEGIN</p>
+    <h2>What wants to be written?</h2>
+    <p class="hint ideas-intro">You don't need to know where to start. Pick a door, open a little page, and see what follows.</p>
+
+    <fieldset class="moods ideas-doors" aria-label="Ways to begin writing">
+      <legend class="sr">Choose a writing door</legend>
+      <label data-idea-mode="anxious"><input type="radio" name="idea-mode" value="anxious"><span><i>✦</i><b>Untangle</b><small>Put the tangled thought somewhere outside your head.</small></span></label>
+      <label data-idea-mode="grateful"><input type="radio" name="idea-mode" value="grateful"><span><i>♡</i><b>Keep</b><small>Hold onto one small thing that made today softer.</small></span></label>
+      <label data-idea-mode="bored"><input type="radio" name="idea-mode" value="bored"><span><i>◌</i><b>Notice</b><small>There is probably something interesting hiding in the ordinary.</small></span></label>
+      <label data-idea-mode="reflective"><input type="radio" name="idea-mode" value="reflective"><span><i>↶</i><b>Look Back</b><small>Follow a thought from today a little further.</small></span></label>
+    </fieldset>
+
+    <div class="ideas-secondary">
+      <div class="ideas-section-label">
+        <p class="eyebrow">MORE WAYS TO BEGIN</p>
+        <span>open another door</span>
+      </div>
+      <div class="idea-chip-grid" aria-label="More writing modes">
+        <label class="idea-chip"><input type="radio" name="idea-mode" value="curious"><span><b>?</b> Curious</span></label>
+        <label class="idea-chip"><input type="radio" name="idea-mode" value="letter"><span><b>✉</b> Letter</span></label>
+        <label class="idea-chip"><input type="radio" name="idea-mode" value="heavy"><span><b>~</b> Heavy</span></label>
+        <label class="idea-chip"><input type="radio" name="idea-mode" value="imagine"><span><b>✧</b> Imagine</span></label>
+        <label class="idea-chip"><input type="radio" name="idea-mode" value="future"><span><b>⌁</b> Dear Future Me</span></label>
+      </div>
+    </div>
+
+    <div class="idea-controls">
+      <div class="depth-picker" aria-label="Prompt depth">
+        <span class="depth-label">HOW DEEP?</span>
+        <label><input type="radio" name="idea-depth" value="tiny" checked><span>Tiny thought</span></label>
+        <label><input type="radio" name="idea-depth" value="explore"><span>Explore</span></label>
+        <label><input type="radio" name="idea-depth" value="deep"><span>Go deeper</span></label>
+      </div>
+      <button id="btn-idea" class="btn primary" type="button">Leave me a prompt</button>
+      <button id="btn-surprise" class="btn secondary surprise-btn" type="button">✦ Surprise me</button>
+    </div>
+
+    <div id="idea-result" class="result idea-card" hidden>
+      <div class="result-kicker">✦ A note for this page</div>
+      <h3>Here is something to follow</h3>
+      <p id="idea-text"></p>
+      <button id="btn-use-idea" class="btn secondary" type="button">Write about this</button>
+    </div>
+
+    <div class="ideas-tools">
+      <section class="mission-card paper-note">
+        <p class="eyebrow">TODAY'S LITTLE MISSION</p>
+        <h3 id="mission-title">The Three Things</h3>
+        <p id="mission-text">Write three things: something you noticed, something you felt, and something you didn't say.</p>
+        <button id="btn-mission" class="text-btn" type="button">Give me a mission →</button>
+      </section>
+
+      <section class="fragments-card paper-note">
+        <p class="eyebrow">PROMPT FRAGMENTS</p>
+        <p class="fragment-hint">Choose a sentence that feels like a door.</p>
+        <div id="prompt-fragments" class="fragment-list" aria-label="Prompt fragments">
+          <button type="button" class="fragment-btn">I didn't tell anyone that…</button>
+          <button type="button" class="fragment-btn">I keep thinking about…</button>
+          <button type="button" class="fragment-btn">Today felt like…</button>
+          <button type="button" class="fragment-btn">Nobody knows that…</button>
+          <button type="button" class="fragment-btn">I wonder what would happen if…</button>
+        </div>
+      </section>
+    </div>
+
+    <div class="inspiration-note glass-panel">
+      <p class="eyebrow">A NOTE FROM THE MARGIN</p>
+      <p id="margin-note">You don't need a big thought to write a page. Sometimes, “the fan was making a weird sound today” is enough to begin.</p>
+    </div>
+
+    <section class="reflection-library glass-panel">
+      <div class="section-heading-row compact-heading">
+        <div>
+          <p class="eyebrow">REFLECTION LIBRARY</p>
+          <h3>A name for what you're noticing.</h3>
+          <p class="hint">These are writing themes, not diagnoses. Open one when a little language would help.</p>
+        </div>
+      </div>
+      <div id="reflection-library-groups" class="library-groups"></div>
+    </section>
+  </section>
+
+  <!-- HISTORY -->
+  <section id="panel-history" class="panel">
+    <div class="section-heading-row">
+      <div>
+        <p class="eyebrow section-eyebrow">YOUR ARCHIVE</p>
+        <h2>Past entries</h2>
+        <p class="hint">Your pages, kept on this device.</p>
+      </div>
+      <button id="btn-new-entry" class="btn secondary" type="button">＋ New entry</button>
+    </div>
+
+    <div class="history-tools glass-panel">
+      <label class="search-field" for="history-search">
+        <span aria-hidden="true">⌕</span>
+        <input id="history-search" type="search" placeholder="Search your journal…" autocomplete="off">
+      </label>
+      <div class="filter-row">
+        <label><span>View</span><select id="history-view"><option value="timeline">Timeline</option><option value="calendar">Calendar</option></select></label>
+        <label><span>Filter</span><select id="history-filter"><option value="all">All entries</option><option value="favorites">Favorites</option><option value="today">Today</option><option value="week">This week</option><option value="month">This month</option></select></label>
+        <label><span>Mood</span><select id="history-mood"><option value="all">All moods</option><option value="anxious">Anxious</option><option value="grateful">Grateful</option><option value="reflective">Reflective</option><option value="bored">Bored</option></select></label>
+      </div>
+    </div>
+
+    <div id="timeline-view">
+      <ul id="history-list" class="history"></ul>
+      <div id="history-empty" class="empty-state" hidden><div class="empty-mark">◌</div><h3>Your pages are waiting.</h3><p>Your first entry will appear here.</p><button id="empty-start" class="btn primary" type="button">Start writing</button></div>
+      <div id="history-no-results" class="empty-state" hidden><div class="empty-mark">⌕</div><h3>Nothing matches that search.</h3><p>Try another word or clear your filters.</p><button id="clear-history-filters" class="btn secondary" type="button">Clear filters</button></div>
+    </div>
+
+    <div id="calendar-view" class="calendar-wrap" hidden>
+      <div class="calendar-nav"><button id="calendar-prev" class="icon-btn" type="button" aria-label="Previous month">←</button><div><p class="eyebrow">JOURNAL CALENDAR</p><h3 id="calendar-title">October 2026</h3></div><button id="calendar-next" class="icon-btn" type="button" aria-label="Next month">→</button></div>
+      <div id="calendar-grid" class="calendar-grid" aria-label="Journal calendar"></div>
+      <p id="calendar-selected" class="calendar-selected">Select a day to see its entries.</p>
+      <div id="calendar-entries" class="calendar-entries"></div>
+    </div>
+
+    <div class="history-footer">
+      <span id="history-summary">0 entries</span>
+      <a href="#confirm-delete" class="text-danger">Delete all entries</a>
+    </div>
+  </section>
+
+  <!-- EXPLORE -->
+  <section id="panel-explore" class="panel">
+    <p class="eyebrow section-eyebrow">LOOKING BACK</p>
+    <h2>Explore your journal.</h2>
+    <p class="hint">Simple, private insights calculated on this device.</p>
+
+    <div class="stats-grid">
+      <article class="stat-card glass-panel"><span>Entries</span><strong id="stat-total">0</strong><small>all time</small></article>
+      <article class="stat-card glass-panel"><span>Writing days</span><strong id="stat-days">0</strong><small>all time</small></article>
+      <article class="stat-card glass-panel"><span>Words</span><strong id="stat-words">0</strong><small>all time</small></article>
+      <article class="stat-card glass-panel"><span>Favorites</span><strong id="stat-favorites">0</strong><small>saved moments</small></article>
+      <article class="stat-card glass-panel"><span>Writing streak</span><strong id="stat-streak">0</strong><small>days in a row</small></article>
+    </div>
+
+    <div class="explore-grid">
+      <article class="insight-card glass-panel">
+        <div class="card-heading"><div><p class="eyebrow">MOOD</p><h3>How your entries feel</h3></div><span class="soft-icon">◔</span></div>
+        <div id="mood-bars" class="mood-bars"></div>
+      </article>
+      <article class="insight-card glass-panel">
+        <div class="card-heading"><div><p class="eyebrow">RHYTHM</p><h3>Your writing pattern</h3></div><span class="soft-icon">⌁</span></div>
+        <div id="rhythm-copy" class="insight-copy"></div>
+      </article>
+    </div>
+
+    <section class="cross-entry-read glass-panel">
+      <div class="cross-entry-head">
+        <div>
+          <p class="eyebrow">READ MY PAGES</p>
+          <h3>What do these pages tell me?</h3>
+          <p class="hint">Choose a few pages. Gemma will look for one thread, one thing to notice, and one question.</p>
+        </div>
+        <span class="paper-stamp">PRIVATE</span>
+      </div>
+      <div id="read-pages-list" class="read-pages-list"></div>
+      <div class="read-pages-actions">
+        <span id="read-pages-count" class="eyebrow">0 selected</span>
+        <button id="btn-read-pages" class="btn primary" type="button" disabled>Find the thread</button>
+      </div>
+      <div id="read-pages-result" class="cross-read-result" hidden>
+        <div class="cross-read-part"><p class="eyebrow">THE THREAD</p><p id="read-thread"></p></div>
+        <div class="cross-read-part"><p class="eyebrow">SOMETHING TO NOTICE</p><p id="read-notice"></p></div>
+        <div class="cross-read-part"><p class="eyebrow">A QUESTION TO CARRY</p><p id="read-question"></p></div>
+        <div class="source-pages"><p class="eyebrow">PAGES BEHIND THIS THOUGHT</p><div id="read-sources" class="source-page-list"></div></div>
+      </div>
+    </section>
+
+    <div class="explore-reflection-grid">
+      <article class="explore-reflection-card glass-panel">
+        <div class="card-heading"><div><p class="eyebrow">THINGS I'VE NOTICED</p><h3>Small patterns in your pages.</h3></div><span class="soft-icon">⌁</span></div>
+        <p class="hint">A few grounded observations, never a diagnosis.</p>
+        <button id="btn-notice-patterns" class="btn secondary" type="button" disabled>Look across my pages</button>
+        <div id="noticed-patterns" class="observation-list" hidden></div>
+      </article>
+      <article class="explore-reflection-card glass-panel">
+        <div class="card-heading"><div><p class="eyebrow">SOMETHING I'M CARRYING</p><h3>One thread that may be following you.</h3></div><span class="soft-icon">~</span></div>
+        <p class="hint">A gentle read across several pages, with the words behind it.</p>
+        <button id="btn-carrying" class="btn secondary" type="button" disabled>Find the thread I'm carrying</button>
+        <div id="carrying-result" class="carrying-result" hidden>
+          <p class="carrying-copy" id="carrying-copy"></p>
+          <div class="source-pages"><p class="eyebrow">WHERE IT SHOWS UP</p><div id="carrying-sources" class="source-page-list"></div></div>
+          <p class="eyebrow carrying-question-label">SIT WITH IT</p><p id="carrying-question"></p>
+        </div>
+      </article>
+    </div>
+
+    <article id="favorite-preview" class="favorite-preview glass-panel">
+      <div class="card-heading"><div><p class="eyebrow">FAVORITES</p><h3>Moments worth keeping</h3></div><button id="view-favorites" class="text-btn" type="button">View all</button></div>
+      <div id="favorite-list" class="favorite-list"></div>
+    </article>
+
+    <div class="explore-note glass-panel">
+      <span class="soft-icon">⌁</span>
+      <div><h3>Your pages stay yours.</h3><p>These reflection tools use the pages you choose and the local Ollama model already connected to this journal.</p></div>
+    </div>
+  </section>
+</main>
+
+<nav class="tabs" aria-label="Sections">
+  <label for="t-write"><span>Write</span></label>
+  <label for="t-ideas"><span>Ideas</span></label>
+  <label for="t-history"><span>History</span></label>
+  <label for="t-explore"><span>Explore</span></label>
+</nav>
+
+<!-- Entry detail -->
+<div id="entry-detail" class="modal" role="dialog" aria-modal="true" aria-labelledby="entry-detail-title">
+  <div class="modal-box detail-box">
+    <button id="detail-close" class="icon-btn modal-close" type="button" aria-label="Close entry">×</button>
+    <div class="detail-topline"><span id="detail-mood" class="mood-chip" hidden></span><span id="detail-date" class="eyebrow"></span></div>
+    <div class="detail-heading"><h2 id="entry-detail-title">Journal entry</h2><button id="detail-favorite" class="favorite-btn" type="button" aria-label="Favorite entry">♡</button></div>
+    <div id="detail-tags" class="tag-list"></div>
+    <div id="detail-text" class="detail-text"></div>
+    <div class="detail-meta" id="detail-meta"></div>
+    <div id="detail-questions" class="detail-reflection" hidden><p class="eyebrow">REFLECTIONS SAVED WITH THIS ENTRY</p><ol></ol></div>
+    <div class="detail-actions"><button id="detail-continue" class="btn primary" type="button">Continue this thought</button><button id="detail-edit" class="btn secondary" type="button">Edit entry</button><button id="detail-print" class="btn secondary" type="button">Print</button><button id="detail-delete" class="btn danger" type="button">Delete</button></div>
+  </div>
+</div>
+
+<!-- Reflection library card -->
+<div id="reflection-library-modal" class="modal" role="dialog" aria-modal="true" aria-labelledby="library-card-title">
+  <div class="modal-box library-modal-box">
+    <button id="library-card-close" class="icon-btn modal-close" type="button" aria-label="Close reflection card">×</button>
+    <p id="library-card-kicker" class="eyebrow">REFLECTION</p>
+    <h2 id="library-card-title">A reflection</h2>
+    <p id="library-card-summary" class="library-card-summary"></p>
+    <div class="library-detail-grid">
+      <div><p class="eyebrow">WHAT MIGHT IT FEEL LIKE?</p><p id="library-card-feel"></p></div>
+      <div><p class="eyebrow">WHAT MIGHT IT LOOK LIKE?</p><p id="library-card-look"></p></div>
+    </div>
+    <div class="library-loop"><p class="eyebrow">WHAT CAN KEEP THE LOOP GOING?</p><p id="library-card-loop"></p></div>
+    <div class="library-reframe"><p class="eyebrow">A GENTLER REFRAME</p><p id="library-card-reframe"></p></div>
+    <div class="related-reflections"><p class="eyebrow">RELATED REFLECTIONS</p><div id="library-card-related" class="related-list"></div></div>
+    <div class="library-write-box">
+      <p class="eyebrow">WRITE ABOUT THIS</p>
+      <p id="library-card-prompt"></p>
+      <button id="btn-library-write" class="btn primary" type="button">Write about this</button>
+    </div>
+  </div>
+</div>
+
+<!-- Settings -->
+<div id="settings-modal" class="modal" role="dialog" aria-modal="true" aria-labelledby="settings-title">
+  <div class="modal-box settings-box">
+    <button id="settings-close" class="icon-btn modal-close" type="button" aria-label="Close settings">×</button>
+    <p class="eyebrow">YOUR SPACE</p>
+    <h2 id="settings-title">Settings</h2>
+    <div class="settings-section"><div><h3>Appearance</h3><p>Choose how My Journal Book looks.</p></div><select id="theme-select"><option value="system">System</option><option value="light">Light</option><option value="dark">Dark</option></select></div>
+    <div class="settings-section"><div><h3>Journal</h3><p>Keep the page useful without adding pressure.</p></div><div class="settings-toggles"><label><input id="toggle-word-count" type="checkbox" checked> Show word count</label><label><input id="toggle-status" type="checkbox" checked> Show local status</label></div></div>
+    <div class="settings-section"><div><h3>AI &amp; privacy</h3><p>AI runs through your local Ollama connection.</p></div><div class="settings-status" id="settings-ai-status">Checking…</div></div>
+    <div class="settings-section settings-actions"><div><h3>Your data</h3><p>Export or restore your journal without a server.</p></div><div class="button-stack"><button id="btn-export-json" class="btn secondary" type="button">Export JSON</button><button id="btn-export-md" class="btn secondary" type="button">Export Markdown</button><button id="btn-import" class="btn secondary" type="button">Import backup</button><input id="import-file" type="file" accept="application/json,.json" hidden><button id="btn-delete-from-settings" class="btn danger" type="button">Delete all entries</button></div></div>
+    <div class="shortcut-note"><strong>Shortcuts</strong><span>Ctrl/Cmd + K search · Ctrl/Cmd + Enter save · Esc close dialogs</span></div>
+  </div>
+</div>
+
+<!-- Delete confirmation -->
+<div id="confirm-delete" class="modal" role="alertdialog" aria-modal="true" aria-labelledby="del-title">
+  <div class="modal-box">
+    <div class="danger-mark">!</div>
+    <h2 id="del-title">Delete everything?</h2>
+    <p>All saved entries will be erased from this device. This can’t be undone.</p>
+    <div class="actions"><button id="btn-delete-cancel" class="btn secondary" type="button">Keep entries</button><button id="btn-delete-confirm" class="btn danger" type="button">Delete all</button></div>
+  </div>
+</div>
+
+<div id="command-palette" class="modal" role="dialog" aria-modal="true" aria-labelledby="palette-title">
+  <div class="modal-box palette-box">
+    <div class="palette-heading"><div><p class="eyebrow">QUICK ACTIONS</p><h2 id="palette-title">What would you like to do?</h2></div><button id="palette-close" class="icon-btn" type="button" aria-label="Close command palette">×</button></div>
+    <button class="palette-action" data-command="write"><span>✦</span><b>New entry</b><small>Start a fresh page</small><kbd>N</kbd></button>
+    <button class="palette-action" data-command="search"><span>⌕</span><b>Search journal</b><small>Find a memory or topic</small><kbd>⌘K</kbd></button>
+    <button class="palette-action" data-command="history"><span>◷</span><b>Open history</b><small>Browse your pages</small></button>
+    <button class="palette-action" data-command="explore"><span>◔</span><b>View insights</b><small>See private writing patterns</small></button>
+    <button class="palette-action" data-command="settings"><span>⚙</span><b>Settings</b><small>Theme, backup, privacy</small></button>
+  </div>
+</div>
+
+<div id="toast" class="toast" role="status" aria-live="polite"></div>
+
+<script type="module" src="app.js?v=journal-book-app-4"></script>
+</body>
+</html>
