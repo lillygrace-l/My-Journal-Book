@@ -34,9 +34,10 @@ function loadSettings() { try { return JSON.parse(localStorage.getItem(SETTINGS_
 function saveSettings(next) { try { localStorage.setItem(SETTINGS_KEY, JSON.stringify(next)); } catch {} }
 function getSetting(key, fallback) { const s = loadSettings(); return s[key] === undefined ? fallback : s[key]; }
 function escapeDate(value) { const d = new Date(value); return Number.isNaN(d.getTime()) ? new Date() : d; }
-function formatDate(dateString, opts = {}) { const d = escapeDate(dateString); return { iso: d.toISOString().split("T")[0], label: d.toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric", ...opts }) }; }
+function localDateKey(value) { const d = escapeDate(value); return [d.getFullYear(), String(d.getMonth() + 1).padStart(2, "0"), String(d.getDate()).padStart(2, "0")].join("-"); }
+function formatDate(dateString, opts = {}) { const d = escapeDate(dateString); return { iso: localDateKey(d), label: d.toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric", ...opts }) }; }
 function formatLongDate(dateString) { return escapeDate(dateString).toLocaleDateString("en-US", { weekday: "long", year: "numeric", month: "long", day: "numeric" }); }
-function dateKey(value) { return escapeDate(value).toISOString().slice(0, 10); }
+function dateKey(value) { return localDateKey(value); }
 function normalizeEntry(entry) { return { ...entry, tags: Array.isArray(entry.tags) ? entry.tags : [], favorite: Boolean(entry.favorite), mood: MOODS.includes(entry.mood) ? entry.mood : "", questions: Array.isArray(entry.questions) ? entry.questions : [] }; }
 function words(text) { return (text.trim().match(/\S+/g) || []).length; }
 function readTime(text) { return Math.max(0, Math.ceil(words(text) / 180)); }
@@ -365,12 +366,12 @@ function parseTaggedSections(output) {
   return { thread: get("THREAD", ["NOTICE", "QUESTION"]), notice: get("NOTICE", ["QUESTION"]), question: get("QUESTION", []) };
 }
 function parseObservationLines(output, entries) {
-  return String(output || "").split(/\r?\n/).map((line) => line.trim()).filter(Boolean).map((line) => {
-    const m = line.match(/^\[([0-9\s,]+)\]\s*(.+)$/);
-    if (!m) return null;
-    const indexes = [...new Set(m[1].split(",").map((x) => Number(x.trim())).filter((x) => Number.isInteger(x) && x >= 1 && x <= entries.length))];
-    return indexes.length ? { text: m[2].trim(), entries: indexes.map((n) => entries[n - 1]) } : null;
-  }).filter(Boolean).slice(0, 3);
+  const clean = String(output || "").replace(/```(?:text)?/gi, "").trim();
+  const matches = [...clean.matchAll(/^\s*\[([0-9\s,]+)\]\s*(.+)$/gm)];
+  return matches.map((match) => {
+    const indexes = [...new Set(match[1].split(",").map((x) => Number(x.trim())).filter((x) => Number.isInteger(x) && x >= 1 && x <= entries.length))];
+    return indexes.length ? { text: match[2].trim(), entries: indexes.map((n) => entries[n - 1]) } : null;
+  }).filter((item) => item && item.text).slice(0, 3);
 }
 function parseCarrying(output, entries) {
   const clean = String(output || "").replace(/```(?:text)?/gi, "").trim();
@@ -475,7 +476,21 @@ function renderInsights() { const entries = loadEntries().map(normalizeEntry), t
 function setTheme(value) { document.documentElement.dataset.theme = value; saveSettings({ ...loadSettings(), theme: value }); }
 $("btn-settings").addEventListener("click", () => { $("theme-select").value = getSetting("theme", "system"); $("toggle-word-count").checked = getSetting("showWordCount", true); $("toggle-status").checked = getSetting("showStatus", true); $("settings-ai-status").textContent = modelStatus.dataset.state === "ready" ? modelText.textContent : "Not connected"; setModal("settings-modal", true); }); $("settings-close").addEventListener("click", () => setModal("settings-modal", false)); $("theme-select").addEventListener("change", (e) => setTheme(e.target.value)); $("toggle-word-count").addEventListener("change", (e) => { saveSettings({ ...loadSettings(), showWordCount: e.target.checked }); $("writing-meta").hidden = !e.target.checked; }); $("toggle-status").addEventListener("change", (e) => { saveSettings({ ...loadSettings(), showStatus: e.target.checked }); document.querySelectorAll(".status-chip").forEach((x) => x.hidden = !e.target.checked); });
 function download(name, content, type) { const blob = new Blob([content], { type }); const a = document.createElement("a"); a.href = URL.createObjectURL(blob); a.download = name; document.body.appendChild(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(a.href), 500); }
-$("btn-export-json").addEventListener("click", () => download("my-journal-book-backup.json", JSON.stringify(loadEntries(), null, 2), "application/json")); $("btn-export-md").addEventListener("click", () => { const md = loadEntries().map(normalizeEntry).map((e) => `# ${formatLongDate(e.createdAt)}\n\n${e.mood ? `**Mood:** ${moodLabel(e.mood)}\n\n` : ""}${e.tags.length ? `**Tags:** ${e.tags.map((x) => `#${x}`).join(" ")}\n\n` : ""}${e.text}\n`).join("\n---\n\n"); download("my-journal-book-journal.md", `# My Journal Book\n\n${md}`, "text/markdown"); }); $("btn-import").addEventListener("click", () => $("import-file").click()); $("import-file").addEventListener("change", async (e) => { const file = e.target.files?.[0]; if (!file) return; try { const parsed = JSON.parse(await file.text()); if (!Array.isArray(parsed)) throw new Error("Backup must contain an array of entries."); const valid = parsed.filter((x) => x && typeof x.text === "string" && x.createdAt).map(normalizeEntry); if (!valid.length && parsed.length) throw new Error("No valid journal entries were found."); const current = loadEntries().map(normalizeEntry); const byId = new Map(current.map((x) => [x.id, x])); valid.forEach((x) => byId.set(x.id, x)); saveEntries([...byId.values()].sort((a,b) => new Date(b.createdAt) - new Date(a.createdAt))); renderHistory(); renderInsights(); showToast(`${valid.length} entries restored`); } catch (err) { alert(`Import failed: ${err.message}`); } finally { e.target.value = ""; } });
+const MAX_IMPORT_FILE_BYTES = 10 * 1024 * 1024;
+const MAX_IMPORT_TEXT_LENGTH = 500_000;
+function validateImportedEntry(entry) {
+  if (!entry || typeof entry !== "object") return null;
+  const id = typeof entry.id === "string" || typeof entry.id === "number" ? String(entry.id).trim() : "";
+  const text = typeof entry.text === "string" ? entry.text : "";
+  const timestamp = new Date(entry.createdAt);
+  if (!id || !text || text.length > MAX_IMPORT_TEXT_LENGTH || Number.isNaN(timestamp.getTime())) return null;
+  if (entry.updatedAt !== undefined && Number.isNaN(new Date(entry.updatedAt).getTime())) return null;
+  if (entry.tags !== undefined && (!Array.isArray(entry.tags) || entry.tags.some((tag) => typeof tag !== "string" || tag.length > 50))) return null;
+  if (entry.questions !== undefined && (!Array.isArray(entry.questions) || entry.questions.some((question) => typeof question !== "string" || question.length > 1000))) return null;
+  if (entry.mood !== undefined && entry.mood !== "" && !MOODS.includes(entry.mood)) return null;
+  return normalizeEntry({ ...entry, id, createdAt: timestamp.toISOString(), ...(entry.updatedAt ? { updatedAt: new Date(entry.updatedAt).toISOString() } : {}) });
+}
+$("btn-export-json").addEventListener("click", () => download("my-journal-book-backup.json", JSON.stringify(loadEntries(), null, 2), "application/json")); $("btn-export-md").addEventListener("click", () => { const md = loadEntries().map(normalizeEntry).map((e) => `# ${formatLongDate(e.createdAt)}\n\n${e.mood ? `**Mood:** ${moodLabel(e.mood)}\n\n` : ""}${e.tags.length ? `**Tags:** ${e.tags.map((x) => `#${x}`).join(" ")}\n\n` : ""}${e.text}\n`).join("\n---\n\n"); download("my-journal-book-journal.md", `# My Journal Book\n\n${md}`, "text/markdown"); }); $("btn-import").addEventListener("click", () => $("import-file").click()); $("import-file").addEventListener("change", async (e) => { const file = e.target.files?.[0]; if (!file) return; try { if (file.size > MAX_IMPORT_FILE_BYTES) throw new Error("Backup file is too large. Please use a backup smaller than 10 MB."); const parsed = JSON.parse(await file.text()); if (!Array.isArray(parsed)) throw new Error("Backup must contain an array of entries."); const valid = parsed.map(validateImportedEntry).filter(Boolean); if (!valid.length && parsed.length) throw new Error("No valid journal entries were found."); if (valid.length !== parsed.length) showToast(`${parsed.length - valid.length} invalid entr${parsed.length - valid.length === 1 ? "y was" : "ies were"} skipped`); const current = loadEntries().map(normalizeEntry); const byId = new Map(current.map((x) => [x.id, x])); valid.forEach((x) => byId.set(x.id, x)); if (!saveEntries([...byId.values()].sort((a,b) => new Date(b.createdAt) - new Date(a.createdAt)))) throw new Error("The restored journal could not be saved."); renderHistory(); renderInsights(); showToast(`${valid.length} entries restored`); } catch (err) { alert(`Import failed: ${err.message}`); } finally { e.target.value = ""; } });
 function openDelete() { setModal("settings-modal", false); setModal("confirm-delete", true); } $("btn-delete-from-settings").addEventListener("click", openDelete); $("panel-history").querySelector(".text-danger").addEventListener("click", (e) => { e.preventDefault(); openDelete(); }); $("btn-delete-cancel").addEventListener("click", () => setModal("confirm-delete", false)); $("btn-delete-confirm").addEventListener("click", () => { localStorage.removeItem(STORAGE_KEY); resetWriter(); renderHistory(); renderInsights(); setModal("confirm-delete", false); showToast("Journal cleared"); });
 
 // Online/offline state
@@ -485,5 +500,5 @@ const initialSettings = loadSettings(); setTheme(initialSettings.theme || "syste
 // Command palette + shortcuts
 function openPalette() { setModal("command-palette", true); } function closePalette() { setModal("command-palette", false); } $("btn-settings").addEventListener("contextmenu", (e) => { e.preventDefault(); openPalette(); }); $("palette-close").addEventListener("click", closePalette); document.querySelectorAll(".palette-action").forEach((button) => button.addEventListener("click", () => { const c = button.dataset.command; closePalette(); if (c === "write") { resetWriter(); setTab("write"); entryText.focus(); } else if (c === "search") { setTab("history"); setTimeout(() => $("history-search").focus(), 80); } else if (c === "history") setTab("history"); else if (c === "explore") setTab("explore"); else if (c === "settings") $("btn-settings").click(); })); document.addEventListener("keydown", (e) => { const mod = e.ctrlKey || e.metaKey; if (mod && e.key.toLowerCase() === "k") { e.preventDefault(); openPalette(); } if (mod && e.key === "Enter" && !entryText.matches(":focus")) return; if (mod && e.key === "Enter" && tabWrite.checked) { e.preventDefault(); persistEntry(); } if (e.key === "Escape") { document.querySelectorAll(".modal.open").forEach((m) => setModal(m.id, false)); } if (!mod && e.key.toLowerCase() === "n" && !/input|textarea|select/i.test(document.activeElement.tagName || "")) { resetWriter(); setTab("write"); entryText.focus(); } });
 
-renderReflectionLibrary(); renderHistory(); renderInsights(); populateWriteStats(); renderCalendar(); setupAI();
+renderReflectionLibrary(); renderHistory(); renderInsights(); populateWriteStats(); renderCalendar(); setTimeout(() => setupAI(), 0);
 if ("serviceWorker" in navigator) { const hadController = Boolean(navigator.serviceWorker.controller); let refreshing = false; navigator.serviceWorker.addEventListener("controllerchange", () => { if (hadController && !refreshing) { refreshing = true; window.location.reload(); } }); window.addEventListener("load", () => navigator.serviceWorker.register("./sw.js?v=journal-book-sw-2", { updateViaCache: "none" }).catch((err) => console.warn("ServiceWorker registration failed:", err))); }
